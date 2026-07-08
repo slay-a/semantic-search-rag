@@ -35,14 +35,15 @@ class Settings:
     effort: str = field(default_factory=lambda: os.getenv("RAG_EFFORT", "high"))
     max_tokens: int = field(default_factory=lambda: _env_int("RAG_MAX_TOKENS", 4096))
 
-    # --- Embeddings (Voyage AI) ---
+    # --- Embeddings (OpenAI / GPT) ---
     embedding_provider: str = field(
-        default_factory=lambda: os.getenv("RAG_EMBEDDING_PROVIDER", "voyage")
+        default_factory=lambda: os.getenv("RAG_EMBEDDING_PROVIDER", "openai")
     )
     embedding_model: str = field(
-        default_factory=lambda: os.getenv("RAG_EMBEDDING_MODEL", "voyage-3")
+        default_factory=lambda: os.getenv("RAG_EMBEDDING_MODEL", "text-embedding-3-small")
     )
-    # Voyage supports asymmetric embeddings: pass input_type to boost retrieval quality.
+    # OpenAI embeddings are symmetric (input_type is ignored); Voyage uses it for
+    # asymmetric query/document embeddings. Batching keeps API round-trips down.
     embedding_batch_size: int = field(
         default_factory=lambda: _env_int("RAG_EMBEDDING_BATCH_SIZE", 64)
     )
@@ -66,6 +67,10 @@ class Settings:
     @property
     def anthropic_api_key(self) -> str | None:
         return os.getenv("ANTHROPIC_API_KEY")
+
+    @property
+    def openai_api_key(self) -> str | None:
+        return os.getenv("OPENAI_API_KEY")
 
     @property
     def voyage_api_key(self) -> str | None:

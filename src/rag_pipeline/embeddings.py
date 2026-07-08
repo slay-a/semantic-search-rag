@@ -8,7 +8,9 @@ The pipeline embeds two kinds of text with the *same* model but *different*
 
 Voyage's asymmetric embeddings use that hint to place a question near the
 passages that answer it (rather than near other questions), which measurably
-improves retrieval. The :class:`HashEmbedder` is a dependency-free, offline
+improves retrieval. OpenAI's ``text-embedding-3`` models are symmetric and
+ignore the hint — the same vector space is used for both. The
+:class:`HashEmbedder` is a dependency-free, offline
 fallback used by the test suite and for quick demos without an API key — it is
 deterministic but NOT semantically meaningful, so never use it in production.
 """
@@ -79,6 +81,52 @@ class VoyageEmbedder:
         return _normalize(matrix)
 
 
+class OpenAIEmbedder:
+    """Production embedder backed by OpenAI's ``text-embedding-3`` models (GPT family).
+
+    Unlike Voyage, OpenAI embeddings are *symmetric* — there is no ``input_type``
+    hint, so the same model embeds both documents and queries. We accept the
+    ``input_type`` argument for interface compatibility but ignore it. OpenAI
+    returns unit-normalized vectors already; we re-normalize defensively.
+    """
+
+    def __init__(self, cfg: Settings = settings) -> None:
+        try:
+            from openai import OpenAI
+        except ImportError as exc:  # pragma: no cover - import guard
+            raise ImportError(
+                "openai is required for the OpenAI embedder. "
+                "Install it with `pip install openai`, or set "
+                "RAG_EMBEDDING_PROVIDER=hash for an offline demo."
+            ) from exc
+
+        if not cfg.openai_api_key:
+            raise RuntimeError(
+                "OPENAI_API_KEY is not set. Add it to your environment/.env, "
+                "or set RAG_EMBEDDING_PROVIDER=hash to run offline."
+            )
+
+        self._client = OpenAI(api_key=cfg.openai_api_key)
+        self._model = cfg.embedding_model
+        self._batch_size = cfg.embedding_batch_size
+        # Resolved lazily from the first API response (varies by model).
+        self.dimension = 0
+
+    def embed(self, texts: list[str], *, input_type: InputType) -> np.ndarray:
+        if not texts:
+            return np.zeros((0, self.dimension or 1), dtype=np.float32)
+
+        vectors: list[list[float]] = []
+        for start in range(0, len(texts), self._batch_size):
+            batch = texts[start : start + self._batch_size]
+            result = self._client.embeddings.create(model=self._model, input=batch)
+            vectors.extend(item.embedding for item in result.data)
+
+        matrix = np.asarray(vectors, dtype=np.float32)
+        self.dimension = matrix.shape[1]
+        return _normalize(matrix)
+
+
 class HashEmbedder:
     """Deterministic offline embedder — a hashed bag-of-words projection.
 
@@ -106,6 +154,8 @@ class HashEmbedder:
 def build_embedder(cfg: Settings = settings) -> Embedder:
     """Factory that honours ``RAG_EMBEDDING_PROVIDER``."""
     provider = cfg.embedding_provider.lower()
+    if provider == "openai":
+        return OpenAIEmbedder(cfg)
     if provider == "voyage":
         return VoyageEmbedder(cfg)
     if provider == "hash":

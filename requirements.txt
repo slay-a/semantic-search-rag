@@ -1,7 +1,9 @@
 # Runtime dependencies (pip install -r requirements.txt)
 # For an editable install with console scripts, prefer: pip install -e ".[dev]"
-anthropic>=0.49
-voyageai>=0.3
+anthropic>=0.49        # answer generation (Claude Messages API)
+openai>=1.40           # text embeddings (text-embedding-3-*)
+voyageai>=0.3          # optional alternative embeddings provider
 numpy>=1.24
 pypdf>=4.0
 python-dotenv>=1.0
+streamlit>=1.36        # basic web UI (app.py)
