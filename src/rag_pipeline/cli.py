@@ -13,6 +13,7 @@ import sys
 from .config import settings
 from .ingest import build_store
 from .pipeline import RAGPipeline
+from .store_factory import open_for_write
 from .types import RAGAnswer
 from .vector_store import VectorStore
 
@@ -26,15 +27,23 @@ def ingest_main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    print(f"Ingesting {args.paths} (backend={settings.store_backend}, "
+          f"provider={settings.embedding_provider}, model={settings.embedding_model}) ...",
+          file=sys.stderr)
+
+    if settings.store_backend == "pgvector":
+        store = open_for_write(settings, append=args.append)
+        build_store(args.paths, store=store)
+        print(f"Indexed {len(store)} chunks -> pgvector table {settings.pg_table}",
+              file=sys.stderr)
+        return 0
+
     existing = None
     if args.append:
         try:
             existing = VectorStore.load(args.out)
         except FileNotFoundError:
             existing = None
-
-    print(f"Ingesting {args.paths} (provider={settings.embedding_provider}, "
-          f"model={settings.embedding_model}) ...", file=sys.stderr)
     store = build_store(args.paths, store=existing)
     store.save(args.out)
     print(f"Indexed {len(store)} chunks -> {args.out}", file=sys.stderr)

@@ -1,9 +1,13 @@
 # Runtime dependencies (pip install -r requirements.txt)
 # For an editable install with console scripts, prefer: pip install -e ".[dev]"
-anthropic>=0.49        # answer generation (Claude Messages API)
-openai>=1.40           # text embeddings (text-embedding-3-*)
-voyageai>=0.3          # optional alternative embeddings provider
+openai>=1.40           # embeddings (text-embedding-3-*) + generation + reranking
 numpy>=1.24
-pypdf>=4.0
+pypdf>=4.0             # PDF ingestion
+openpyxl>=3.1          # Excel (.xlsx) ingestion
+requests>=2.31         # URL ingestion (fetch pages)
+beautifulsoup4>=4.12   # URL ingestion (HTML -> text)
 python-dotenv>=1.0
-streamlit>=1.36        # basic web UI (app.py)
+streamlit>=1.36        # web UI (app.py)
+psycopg[binary]>=3.1   # Supabase / pgvector backend
+anthropic>=0.49        # optional: RAG_GENERATION_PROVIDER=anthropic
+voyageai>=0.3          # optional: RAG_EMBEDDING_PROVIDER=voyage

@@ -1,4 +1,4 @@
-"""Semantic-search RAG pipeline over unstructured data, grounded on Claude.
+"""Semantic-search RAG pipeline over unstructured data (OpenAI, or Claude).
 
 Public surface:
 

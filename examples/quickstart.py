@@ -1,7 +1,7 @@
 """End-to-end example: ingest the sample docs, then ask a grounded question.
 
 Run with real providers:
-    ANTHROPIC_API_KEY=... VOYAGE_API_KEY=... python examples/quickstart.py
+    OPENAI_API_KEY=... python examples/quickstart.py
 
 Run fully offline (no API keys, hashed embeddings, retrieval only):
     RAG_EMBEDDING_PROVIDER=hash python examples/quickstart.py --retrieval-only
@@ -24,7 +24,7 @@ def main() -> None:
     parser.add_argument(
         "--retrieval-only",
         action="store_true",
-        help="Skip Claude generation; just show what retrieval returns.",
+        help="Skip LLM generation; just show what retrieval returns.",
     )
     parser.add_argument(
         "-q",

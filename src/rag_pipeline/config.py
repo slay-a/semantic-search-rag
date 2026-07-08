@@ -27,12 +27,21 @@ def _env_int(name: str, default: int) -> int:
 class Settings:
     """Immutable pipeline settings resolved from the environment."""
 
-    # --- Generation (Claude) ---
-    generation_model: str = field(
-        default_factory=lambda: os.getenv("RAG_GENERATION_MODEL", "claude-opus-4-8")
+    # --- Generation ---
+    generation_provider: str = field(
+        default_factory=lambda: os.getenv("RAG_GENERATION_PROVIDER", "openai")
     )
-    # Effort controls thinking depth + token spend on Opus 4.8: low|medium|high|xhigh|max.
+    generation_model: str = field(
+        default_factory=lambda: os.getenv("RAG_GENERATION_MODEL", "gpt-4o-mini")
+    )
+    # Anthropic-only: effort controls thinking depth + token spend on Claude
+    # (low|medium|high|xhigh|max). Ignored by the OpenAI backend.
     effort: str = field(default_factory=lambda: os.getenv("RAG_EFFORT", "high"))
+
+    # --- Bot personality (per-deployment; the app can override per session) ---
+    bot_name: str = field(default_factory=lambda: os.getenv("RAG_BOT_NAME", "Assistant"))
+    # Extra persona/voice instructions prepended to the grounding system prompt.
+    bot_persona: str = field(default_factory=lambda: os.getenv("RAG_BOT_PERSONA", ""))
     max_tokens: int = field(default_factory=lambda: _env_int("RAG_MAX_TOKENS", 4096))
 
     # --- Embeddings (OpenAI / GPT) ---
@@ -58,10 +67,42 @@ class Settings:
     min_score: float = field(
         default_factory=lambda: float(os.getenv("RAG_MIN_SCORE", "0.0"))
     )
+    # Hybrid search: fuse dense (vector) + sparse (BM25/full-text) rankings.
+    hybrid: bool = field(
+        default_factory=lambda: os.getenv("RAG_HYBRID", "true").lower() == "true"
+    )
+    # Candidate pool pulled from each retriever before fusion / reranking.
+    candidate_k: int = field(default_factory=lambda: _env_int("RAG_CANDIDATE_K", 30))
+
+    # --- Reranking ---
+    rerank: bool = field(
+        default_factory=lambda: os.getenv("RAG_RERANK", "true").lower() == "true"
+    )
+    rerank_provider: str = field(
+        default_factory=lambda: os.getenv("RAG_RERANK_PROVIDER", "llm")
+    )
+    rerank_model: str = field(
+        default_factory=lambda: os.getenv("RAG_RERANK_MODEL", "gpt-4o-mini")
+    )
 
     # --- Persistence ---
+    # Backend for the vector store: "numpy" (local .npz file) or "pgvector" (Postgres).
+    store_backend: str = field(
+        default_factory=lambda: os.getenv("RAG_STORE_BACKEND", "numpy")
+    )
     store_path: str = field(
         default_factory=lambda: os.getenv("RAG_STORE_PATH", "store/index.npz")
+    )
+    # Postgres connection string for the pgvector backend, e.g.
+    # postgresql://user:pass@host:5432/dbname
+    database_url: str | None = field(
+        default_factory=lambda: os.getenv("DATABASE_URL")
+    )
+    # Table name used by the pgvector backend.
+    pg_table: str = field(default_factory=lambda: os.getenv("RAG_PG_TABLE", "rag_chunks"))
+    # Log each query (question + whether it was answered) to a table for analytics.
+    enable_analytics: bool = field(
+        default_factory=lambda: os.getenv("RAG_ANALYTICS", "true").lower() == "true"
     )
 
     @property

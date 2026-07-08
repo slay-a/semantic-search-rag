@@ -13,8 +13,10 @@ import pytest
 
 from rag_pipeline.chunking import chunk_document, estimate_tokens
 from rag_pipeline.embeddings import HashEmbedder
+from rag_pipeline.fusion import reciprocal_rank_fusion
 from rag_pipeline.generator import extract_citations
 from rag_pipeline.pipeline import RAGPipeline
+from rag_pipeline.reranker import IdentityReranker
 from rag_pipeline.types import Chunk, ScoredChunk
 from rag_pipeline.vector_store import VectorStore
 
@@ -87,13 +89,15 @@ def test_extract_citations_resolves_markers():
 
 
 class _FakeGenerator:
-    """Stand-in for the Claude-backed Generator (no network)."""
+    """Stand-in for a real Generator (no network)."""
 
-    def answer(self, question, chunks):
+    last_usage: dict = {"input_tokens": 10, "output_tokens": 5}
+
+    def answer(self, question, chunks, *, history=None):
         cite = "".join(f"[{i}]" for i in range(1, len(chunks) + 1))
-        return f"Grounded answer {cite}", {"input_tokens": 10, "output_tokens": 5}
+        return f"Grounded answer {cite}", self.last_usage
 
-    def stream_answer(self, question, chunks):
+    def stream_answer(self, question, chunks, *, history=None):
         yield from ["Grounded ", "answer ", "[1]"]
 
     def rewrite_query_hyde(self, question):
@@ -103,7 +107,17 @@ class _FakeGenerator:
 def test_pipeline_query_end_to_end_offline():
     embedder = HashEmbedder(dimension=128)
     store = _toy_store(embedder)
-    rag = RAGPipeline(store, embedder=embedder, generator=_FakeGenerator())
+    from dataclasses import replace
+
+    from rag_pipeline.config import settings as _settings
+
+    rag = RAGPipeline(
+        store,
+        cfg=replace(_settings, enable_analytics=False),  # no analytics file writes in tests
+        embedder=embedder,
+        generator=_FakeGenerator(),
+        reranker=IdentityReranker(),  # avoid the network-backed default reranker
+    )
     answer = rag.query("what happens on 429", top_k=2)
     assert answer.answer.startswith("Grounded answer")
     assert answer.citations  # markers resolved back to sources
@@ -114,3 +128,64 @@ def test_add_dimension_mismatch_raises():
     store = VectorStore(dimension=4)
     with pytest.raises(ValueError):
         store.add([Chunk(id="x", text="t", source="s")], np.zeros((1, 8), dtype=np.float32))
+
+
+def test_bm25_keyword_search_finds_exact_term():
+    embedder = HashEmbedder(dimension=64)
+    store = _toy_store(embedder)
+    # "HMAC" is a rare exact term dense embeddings often miss but BM25 nails.
+    results = store.keyword_search("HMAC signed webhooks", top_k=3)
+    assert results
+    assert results[0].chunk.id == "3"
+
+
+def test_rrf_fusion_rewards_agreement():
+    a = Chunk(id="a", text="", source="")
+    b = Chunk(id="b", text="", source="")
+    c = Chunk(id="c", text="", source="")
+    dense = [ScoredChunk(a, 0.9), ScoredChunk(b, 0.8)]
+    sparse = [ScoredChunk(b, 5.0), ScoredChunk(c, 4.0)]
+    fused = reciprocal_rank_fusion([dense, sparse])
+    # b appears in both lists, so it should fuse to the top.
+    assert fused[0].chunk.id == "b"
+    assert {sc.chunk.id for sc in fused} == {"a", "b", "c"}
+
+
+def test_bm25_index_survives_save_load(tmp_path):
+    embedder = HashEmbedder(dimension=64)
+    store = _toy_store(embedder)
+    path = tmp_path / "idx.npz"
+    store.save(path)
+    reloaded = VectorStore.load(path)
+    results = reloaded.keyword_search("Retry-After header", top_k=2)
+    assert results and results[0].chunk.id == "1"
+
+
+def test_tenant_isolation_in_search_and_keyword():
+    embedder = HashEmbedder(dimension=64)
+    store = VectorStore()
+    acme = [Chunk(id="a1", text="Acme refunds take 5 business days.", source="acme")]
+    globex = [Chunk(id="g1", text="Globex refunds are instant.", source="globex")]
+    store.add(acme, embedder.embed([c.text for c in acme], input_type="document"),
+              tenant_id="acme")
+    store.add(globex, embedder.embed([c.text for c in globex], input_type="document"),
+              tenant_id="globex")
+
+    qv = embedder.embed(["refund policy"], input_type="query")[0]
+    acme_hits = store.search(qv, top_k=5, tenant_id="acme")
+    assert acme_hits and all(h.chunk.source == "acme" for h in acme_hits)
+
+    kw = store.keyword_search("refunds", top_k=5, tenant_id="globex")
+    assert kw and all(h.chunk.source == "globex" for h in kw)
+
+
+def test_csv_and_xlsx_loaders(tmp_path):
+    from rag_pipeline.ingest import LOADERS, load_chunks
+
+    assert ".csv" in LOADERS and ".xlsx" in LOADERS
+    csv_path = tmp_path / "faq.csv"
+    csv_path.write_text("question,answer\nreturns?,within 30 days\n", encoding="utf-8")
+    chunks = load_chunks([csv_path], tenant_id="t1")
+    assert chunks
+    assert "within 30 days" in chunks[0].text
+    assert chunks[0].metadata["tenant_id"] == "t1"

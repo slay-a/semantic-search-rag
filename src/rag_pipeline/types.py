@@ -44,3 +44,5 @@ class RAGAnswer:
     citations: list[Citation] = field(default_factory=list)
     retrieved: list[ScoredChunk] = field(default_factory=list)
     usage: dict[str, int] = field(default_factory=dict)
+    # True when the model declined for lack of grounded context (→ offer handoff).
+    abstained: bool = False

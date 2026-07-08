@@ -98,3 +98,13 @@ def build_hyde_prompt(question: str) -> str:
         f"Question: {question.strip()}\n\n"
         "Write the hypothetical source paragraph that would answer it."
     )
+
+
+# The exact opener the system prompt instructs the model to use when it can't
+# answer from the sources. Used to detect abstention → offer a human handoff.
+ABSTAIN_PREFIX = "I don't have enough information"
+
+
+def is_abstention(answer: str) -> bool:
+    """True when the model declined to answer for lack of grounded context."""
+    return answer.strip().lower().startswith(ABSTAIN_PREFIX.lower())

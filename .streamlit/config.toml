@@ -1,0 +1,12 @@
+# Base Streamlit theme. The app also injects its own light/dark CSS at runtime
+# (toggle in the sidebar); this sets a pleasant default before that loads.
+[theme]
+base = "dark"
+primaryColor = "#7c6cf6"
+backgroundColor = "#0f1117"
+secondaryBackgroundColor = "#171a23"
+textColor = "#e8e9f0"
+font = "sans serif"
+
+[server]
+headless = true
