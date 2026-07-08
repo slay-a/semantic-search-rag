@@ -392,7 +392,7 @@ with st.sidebar:
         workspaces = sorted(list(set(workspaces)))
         st.session_state.workspaces = workspaces
 
-    with st.popover(f"{st.session_state.workspace} ▾", use_container_width=True):
+    with st.popover(st.session_state.workspace, use_container_width=True):
         st.markdown("**Switch Workspace**")
         
         # 1. Selection List
