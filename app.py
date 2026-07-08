@@ -220,29 +220,7 @@ div[data-testid="stChatInput"] textarea:focus {
 ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
-/* ── Popover & Destructive Buttons ────────────────────────────────────── */
-div[data-testid="stPopover"] {
-  width: 100% !important;
-}
-div[data-testid="stPopover"] > button {
-  background: var(--surface2) !important;
-  border: 1px solid var(--border) !important;
-  color: var(--text) !important;
-  border-radius: 8px !important;
-  padding: 0.55rem 0.85rem !important;
-  font-weight: 500 !important;
-  text-align: left !important;
-  justify-content: space-between !important;
-  width: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-  font-family: 'Inter', sans-serif !important;
-}
-div[data-testid="stPopover"] > button:hover {
-  border-color: var(--accent) !important;
-  background: var(--surface3) !important;
-  box-shadow: 0 0 12px var(--glow) !important;
-}
+/* ── Destructive Buttons ──────────────────────────────────────────────── */
 button[data-testid="baseButton-primary"] {
   background: rgba(239, 68, 68, 0.15) !important;
   border: 1px solid rgba(239, 68, 68, 0.3) !important;
@@ -392,7 +370,7 @@ with st.sidebar:
         workspaces = sorted(list(set(workspaces)))
         st.session_state.workspaces = workspaces
 
-    with st.popover(st.session_state.workspace, use_container_width=True):
+    with st.expander(st.session_state.workspace, expanded=False):
         st.markdown("**Switch Workspace**")
         
         # 1. Selection List
