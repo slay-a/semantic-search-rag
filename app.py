@@ -27,7 +27,7 @@ from rag_pipeline.ingest import build_store
 from rag_pipeline.pipeline import RAGPipeline
 from rag_pipeline.store_factory import open_for_read, open_for_write
 
-st.set_page_config(page_title="Semantic Search RAG", page_icon="💬", layout="wide")
+st.set_page_config(page_title="Semantic Search RAG", layout="wide")
 
 PG = settings.store_backend == "pgvector"
 
@@ -81,7 +81,7 @@ section[data-testid="stSidebar"] .stDivider {
   width: 46px; height: 46px; border-radius: 14px;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   display: flex; align-items: center; justify-content: center;
-  font-size: 22px; color: #fff;
+  font-size: 22px; color: #fff; font-weight: 800;
   box-shadow: 0 0 24px var(--glow);
 }
 .nx-title {
@@ -357,6 +357,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []  # [{role, content, sources?, handoff?}]
 if "workspace" not in st.session_state:
     st.session_state.workspace = "default"
+if "workspaces" not in st.session_state:
+    st.session_state.workspaces = get_workspaces()
 if "show_add_workspace" not in st.session_state:
     st.session_state.show_add_workspace = False
 
@@ -367,19 +369,20 @@ if "show_add_workspace" not in st.session_state:
 with st.sidebar:
     # ── Brand
     st.markdown(
-        f'<div class="nx-brand"><div class="nx-logo">💬</div>'
+        f'<div class="nx-brand"><div class="nx-logo">S</div>'
         f'<div><div class="nx-title">{settings.bot_name}</div>'
         f'<div class="nx-sub">Semantic Search · Grounded Answers</div></div></div>',
         unsafe_allow_html=True,
     )
 
     # ── Workspace selector
-    st.markdown('<div class="nx-section">📂 Workspace</div>', unsafe_allow_html=True)
+    st.markdown('<div class="nx-section">Workspace</div>', unsafe_allow_html=True)
     
-    workspaces = get_workspaces()
+    workspaces = list(st.session_state.workspaces)
     if st.session_state.workspace not in workspaces:
         workspaces.append(st.session_state.workspace)
         workspaces = sorted(list(set(workspaces)))
+        st.session_state.workspaces = workspaces
         
     col1, col2, col3 = st.columns([0.7, 0.15, 0.15])
     
@@ -395,7 +398,7 @@ with st.sidebar:
             st.rerun()
             
     with col2:
-        if st.button("➕", help="Add workspace", use_container_width=True):
+        if st.button("+", help="Add workspace", use_container_width=True):
             st.session_state.show_add_workspace = True
             st.rerun()
             
@@ -404,7 +407,7 @@ with st.sidebar:
             st.markdown("**Workspace Options**")
             
             # --- Rename Option ---
-            st.markdown("✏️ Rename")
+            st.markdown("Rename")
             new_name = st.text_input("New name", value=st.session_state.workspace, key="rename_input")
             if st.button("Save Name", use_container_width=True):
                 new_name = new_name.strip().lower().replace(" ", "-")
@@ -413,18 +416,20 @@ with st.sidebar:
                     rename_workspace(old_name, new_name)
                     st.session_state.workspace = new_name
                     load_pipeline.clear()
+                    st.session_state.workspaces = get_workspaces()
                     st.success(f"Renamed to '{new_name}'")
                     st.rerun()
             
             # --- Delete Option ---
             st.markdown("---")
-            st.markdown("🗑️ Delete")
+            st.markdown("Delete")
             st.warning("Warning: This will permanently delete all indexed documents in this workspace.")
             if st.button("Delete Workspace", use_container_width=True, type="primary"):
                 old_name = st.session_state.workspace
                 delete_workspace(old_name)
                 st.session_state.workspace = "default"
                 load_pipeline.clear()
+                st.session_state.workspaces = get_workspaces()
                 st.success(f"Workspace '{old_name}' deleted.")
                 st.rerun()
 
@@ -438,6 +443,7 @@ with st.sidebar:
                     if new_ws:
                         st.session_state.workspace = new_ws
                         st.session_state.show_add_workspace = False
+                        st.session_state.workspaces = get_workspaces()
                         st.rerun()
             with c2:
                 if st.form_submit_button("Cancel", use_container_width=True):
@@ -447,7 +453,7 @@ with st.sidebar:
     tenant_id = st.session_state.workspace
 
     # ── Persona
-    st.markdown('<div class="nx-section">🤖 Persona</div>', unsafe_allow_html=True)
+    st.markdown('<div class="nx-section">Persona</div>', unsafe_allow_html=True)
     persona = st.text_area(
         "Bot personality (optional)", value=settings.bot_persona,
         placeholder="e.g. You are Ava, a warm, concise support agent for Acme.",
@@ -455,7 +461,7 @@ with st.sidebar:
     )
 
     # ── Knowledge Base (in sidebar dropdown)
-    st.markdown('<div class="nx-section">📥 Knowledge Base</div>', unsafe_allow_html=True)
+    st.markdown('<div class="nx-section">Knowledge Base</div>', unsafe_allow_html=True)
     with st.expander("Add sources", expanded=not index_ready(settings.store_path)):
         uploads = st.file_uploader(
             "Upload docs (.pdf .txt .md .csv .xlsx)",
@@ -492,12 +498,13 @@ with st.sidebar:
                         build_store(paths, urls=urls, store=store, tenant_id=tenant_id)
                         store.save(settings.store_path)
                     load_pipeline.clear()
-                    st.success(f"✓ Knowledge base updated — {len(store)} chunks indexed.")
+                    st.session_state.workspaces = get_workspaces()
+                    st.success(f"Knowledge base updated — {len(store)} chunks indexed.")
                 except Exception as exc:
                     st.error(f"Indexing failed: {exc}")
 
     # ── Retrieval settings
-    st.markdown('<div class="nx-section">⚙️ Retrieval</div>', unsafe_allow_html=True)
+    st.markdown('<div class="nx-section">Retrieval</div>', unsafe_allow_html=True)
     with st.expander("Settings", expanded=False):
         top_k = st.slider("Sources per answer", 1, 15, settings.top_k)
         use_hyde = st.toggle("HyDE query rewriting", value=False)
@@ -510,7 +517,7 @@ with st.sidebar:
         )
 
     st.divider()
-    if st.button("🗑  Clear conversation", use_container_width=True):
+    if st.button("Clear conversation", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
@@ -520,7 +527,7 @@ with st.sidebar:
 # --------------------------------------------------------------------------- #
 st.markdown(
     f'<div class="nx-header">'
-    f'<h2>💬 {settings.bot_name}</h2>'
+    f'<h2>{settings.bot_name}</h2>'
     f'<div class="nx-header-sub">Workspace: <strong>{tenant_id}</strong> · '
     f'Ask anything about your uploaded knowledge base</div></div>',
     unsafe_allow_html=True,
@@ -530,7 +537,6 @@ st.markdown(
 if not st.session_state.messages:
     st.markdown(
         '<div class="nx-empty">'
-        '<div class="nx-empty-icon">🔍</div>'
         '<h3>Ready to chat</h3>'
         '<p>Upload documents in the sidebar, build your knowledge base, '
         'then ask a question below.</p></div>',
@@ -547,7 +553,7 @@ for msg in st.session_state.messages:
             )
         if msg.get("handoff"):
             st.markdown(
-                '<div class="nx-handoff">🙋 I couldn\'t find this in the knowledge '
+                '<div class="nx-handoff">I couldn\'t find this in the knowledge '
                 "base. Want me to connect you with a human agent?</div>",
                 unsafe_allow_html=True,
             )
@@ -593,7 +599,7 @@ if prompt:
             )
         if answer.abstained:
             st.markdown(
-                '<div class="nx-handoff">🙋 I couldn\'t find this in the knowledge '
+                '<div class="nx-handoff">I couldn\'t find this in the knowledge '
                 "base. Want me to connect you with a human agent?</div>",
                 unsafe_allow_html=True,
             )
