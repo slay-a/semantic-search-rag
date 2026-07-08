@@ -113,6 +113,20 @@ class Settings:
     def openai_api_key(self) -> str | None:
         return os.getenv("OPENAI_API_KEY")
 
+    # --- Supabase Auth (optional login). When both are set, the app requires
+    # sign-in and scopes each user's data to their account. ---
+    @property
+    def supabase_url(self) -> str | None:
+        return os.getenv("SUPABASE_URL")
+
+    @property
+    def supabase_anon_key(self) -> str | None:
+        return os.getenv("SUPABASE_ANON_KEY")
+
+    @property
+    def auth_enabled(self) -> bool:
+        return bool(self.supabase_url and self.supabase_anon_key)
+
     @property
     def voyage_api_key(self) -> str | None:
         return os.getenv("VOYAGE_API_KEY")

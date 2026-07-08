@@ -179,6 +179,23 @@ def test_tenant_isolation_in_search_and_keyword():
     assert kw and all(h.chunk.source == "globex" for h in kw)
 
 
+def test_crawl_site_stays_on_domain_and_caps_pages():
+    from rag_pipeline.ingest import crawl_site
+
+    pages = {
+        "https://ex.com/": "<a href='/a'>a</a><a href='https://other.com/z'>z</a> home",
+        "https://ex.com/a": "<a href='/b'>b</a><a href='/c'>c</a> alpha",
+        "https://ex.com/b": "beta",
+        "https://ex.com/c": "gamma",
+    }
+    out = crawl_site("https://ex.com/", max_pages=3, fetcher=lambda u: pages[u])
+    urls = [u for u, _ in out]
+    assert len(out) == 3                          # max_pages respected
+    assert "https://ex.com/" in urls              # started at the root
+    assert all("other.com" not in u for u in urls)  # never left the domain
+    assert all(text.strip() for _, text in out)   # extracted readable text
+
+
 def test_csv_and_xlsx_loaders(tmp_path):
     from rag_pipeline.ingest import LOADERS, load_chunks
 

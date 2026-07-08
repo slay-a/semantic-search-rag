@@ -1,12 +1,17 @@
-# Base Streamlit theme. The app also injects its own light/dark CSS at runtime
-# (toggle in the sidebar); this sets a pleasant default before that loads.
+# Base Streamlit theme — ZenRag: a warm, dark, ember-orange theme.
 [theme]
 base = "dark"
-primaryColor = "#7c6cf6"
-backgroundColor = "#0f1117"
-secondaryBackgroundColor = "#171a23"
-textColor = "#e8e9f0"
+primaryColor = "#f97316"
+backgroundColor = "#0c0c0e"
+secondaryBackgroundColor = "#16151a"
+textColor = "#f3f1ee"
 font = "sans serif"
 
 [server]
 headless = true
+
+[client]
+# Don't dump Python tracebacks into the browser (looks bad in a demo). The app
+# still shows friendly st.error/st.warning messages for handled cases.
+showErrorDetails = "none"
+toolbarMode = "minimal"

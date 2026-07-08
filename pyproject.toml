@@ -25,6 +25,7 @@ dependencies = [
 
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.1"]   # Supabase / pgvector (RAG_STORE_BACKEND=pgvector)
+auth = ["supabase>=2.0"]              # Supabase Auth (email/password login)
 anthropic = ["anthropic>=0.49"]       # RAG_GENERATION_PROVIDER=anthropic
 voyage = ["voyageai>=0.3"]            # RAG_EMBEDDING_PROVIDER=voyage
 dev = ["pytest>=8.0", "ruff>=0.5"]

@@ -22,6 +22,7 @@ from typing import Protocol
 
 from .config import Settings, settings
 from .prompts import (
+    GENERAL_SYSTEM_PROMPT,
     HYDE_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
     build_hyde_prompt,
@@ -32,10 +33,16 @@ from .types import Citation, ScoredChunk
 _CITATION_RE = re.compile(r"\[(\d+)\]")
 
 
-def _system_text(persona: str) -> str:
-    """Grounding system prompt, optionally prefixed with a per-bot persona."""
+def _base_prompt(allow_general: bool) -> str:
+    """Strict-grounding prompt, or the general-knowledge-fallback variant."""
+    return GENERAL_SYSTEM_PROMPT if allow_general else SYSTEM_PROMPT
+
+
+def _system_text(persona: str, allow_general: bool = False) -> str:
+    """System prompt, optionally prefixed with a per-bot persona."""
     persona = (persona or "").strip()
-    return f"{persona}\n\n{SYSTEM_PROMPT}" if persona else SYSTEM_PROMPT
+    base = _base_prompt(allow_general)
+    return f"{persona}\n\n{base}" if persona else base
 
 
 def extract_citations(answer: str, chunks: list[ScoredChunk]) -> list[Citation]:
@@ -101,10 +108,12 @@ def _openai_usage(usage) -> dict:
 class OpenAIGenerator:
     """Grounded answering + HyDE rewriting via OpenAI Chat Completions."""
 
-    def __init__(self, cfg: Settings = settings, persona: str = "") -> None:
+    def __init__(
+        self, cfg: Settings = settings, persona: str = "", allow_general: bool = False
+    ) -> None:
         self._cfg = cfg
         self._client = _openai_client(cfg)
-        self._system = _system_text(persona)
+        self._system = _system_text(persona, allow_general)
         self.last_usage: dict = {}
 
     def stream_answer(
@@ -173,17 +182,20 @@ def _anthropic_usage(msg) -> dict:
 class AnthropicGenerator:
     """Grounded answering + HyDE rewriting via the Claude Messages API."""
 
-    def __init__(self, cfg: Settings = settings, persona: str = "") -> None:
+    def __init__(
+        self, cfg: Settings = settings, persona: str = "", allow_general: bool = False
+    ) -> None:
         self._cfg = cfg
         self._anthropic = _anthropic_client(cfg)
         self._persona = (persona or "").strip()
+        self._base = _base_prompt(allow_general)
         self.last_usage: dict = {}
 
     def _system_blocks(self) -> list[dict]:
         # Cache breakpoint on the stable grounding prompt; persona (which can vary
         # per bot) goes in a separate, uncached block after it.
         blocks = [
-            {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}
+            {"type": "text", "text": self._base, "cache_control": {"type": "ephemeral"}}
         ]
         if self._persona:
             blocks.append({"type": "text", "text": self._persona})
@@ -224,12 +236,14 @@ class AnthropicGenerator:
         return text.strip() or question
 
 
-def build_generator(cfg: Settings = settings, persona: str | None = None) -> Generator:
+def build_generator(
+    cfg: Settings = settings, persona: str | None = None, allow_general: bool = False
+) -> Generator:
     """Factory that honours ``RAG_GENERATION_PROVIDER`` (openai | anthropic)."""
     persona = cfg.bot_persona if persona is None else persona
     provider = cfg.generation_provider.lower()
     if provider == "openai":
-        return OpenAIGenerator(cfg, persona=persona)
+        return OpenAIGenerator(cfg, persona=persona, allow_general=allow_general)
     if provider == "anthropic":
-        return AnthropicGenerator(cfg, persona=persona)
+        return AnthropicGenerator(cfg, persona=persona, allow_general=allow_general)
     raise ValueError(f"Unknown generation provider: {cfg.generation_provider!r}")

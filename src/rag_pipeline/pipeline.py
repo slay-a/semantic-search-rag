@@ -33,13 +33,14 @@ class RAGPipeline:
         generator: Generator | None = None,
         reranker: Reranker | None = None,
         persona: str | None = None,
+        allow_general: bool = False,
         use_hyde: bool = False,
     ) -> None:
         self._cfg = cfg
         self._embedder = embedder or build_embedder(cfg)
         self._reranker = reranker or build_reranker(cfg)
         self._retriever = Retriever(store, self._embedder, cfg, reranker=self._reranker)
-        self._generator = generator or build_generator(cfg, persona)
+        self._generator = generator or build_generator(cfg, persona, allow_general)
         self._use_hyde = use_hyde
 
     @classmethod
