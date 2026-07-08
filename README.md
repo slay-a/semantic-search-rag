@@ -5,8 +5,9 @@ semantic search over unstructured data. It combines **vector embeddings** for
 retrieval with **advanced prompt engineering** for grounded, cited answers from
 **Claude**.
 
-- **Embeddings:** [Voyage AI](https://www.voyageai.com/) (`voyage-3` by default) — Anthropic's recommended embedding provider — with asymmetric `query`/`document` input types for better retrieval.
+- **Embeddings:** [OpenAI](https://platform.openai.com/) (`text-embedding-3-small` by default; `-large` supported). Voyage AI is available as an alternative provider.
 - **Generation:** Claude `claude-opus-4-8` via the Messages API, with adaptive thinking, streaming, prompt caching, and inline citations.
+- **UI:** a [Streamlit](https://streamlit.io/) app (`app.py`) for uploading docs, building the index, and asking cited questions.
 - **Vector store:** an exact cosine-similarity store in NumPy — zero external services, swappable for a managed DB.
 - **Offline mode:** a deterministic hashed embedder lets you run ingest, retrieval, and the full test suite with **no API keys**.
 
@@ -17,7 +18,7 @@ retrieval with **advanced prompt engineering** for grounded, cited answers from
 ```
               ┌────────────── ingest (once) ──────────────┐
   files ─▶ load ─▶ chunk ─▶ embed(document) ─▶ VectorStore.save()
- (.txt/.md/.pdf)   │          (Voyage)              │
+ (.txt/.md/.pdf)   │          (OpenAI)              │
                    └── overlapping, paragraph-aware ┘
 
               ┌────────────── query (per request) ────────┐
@@ -39,7 +40,7 @@ The pieces map 1:1 to modules in [`src/rag_pipeline/`](src/rag_pipeline):
 | Module | Responsibility |
 |---|---|
 | [`chunking.py`](src/rag_pipeline/chunking.py) | Paragraph-aware, overlapping chunking |
-| [`embeddings.py`](src/rag_pipeline/embeddings.py) | Voyage embedder + offline hashed fallback |
+| [`embeddings.py`](src/rag_pipeline/embeddings.py) | OpenAI / Voyage embedders + offline hashed fallback |
 | [`vector_store.py`](src/rag_pipeline/vector_store.py) | Cosine search, save/load |
 | [`ingest.py`](src/rag_pipeline/ingest.py) | File loaders (txt/md/pdf) → chunks → store |
 | [`retriever.py`](src/rag_pipeline/retriever.py) | Query embedding + optional HyDE |
@@ -55,7 +56,13 @@ The pieces map 1:1 to modules in [`src/rag_pipeline/`](src/rag_pipeline):
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"          # or: pip install -r requirements.txt
-cp .env.example .env             # add ANTHROPIC_API_KEY and VOYAGE_API_KEY
+cp .env.example .env             # add ANTHROPIC_API_KEY and OPENAI_API_KEY
+```
+
+## Web UI
+
+```bash
+streamlit run app.py             # upload docs, build the index, ask cited questions
 ```
 
 ## Quickstart
