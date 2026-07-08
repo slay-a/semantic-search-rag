@@ -221,17 +221,27 @@ div[data-testid="stChatInput"] textarea:focus {
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
 /* ── Popover & Destructive Buttons ────────────────────────────────────── */
+div[data-testid="stPopover"] {
+  width: 100% !important;
+}
 div[data-testid="stPopover"] > button {
-  background: transparent !important;
-  border: none !important;
-  color: var(--muted) !important;
-  font-size: 1.25rem !important;
-  padding: 0.25rem 0.5rem !important;
-  line-height: 1 !important;
+  background: var(--surface2) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  border-radius: 8px !important;
+  padding: 0.55rem 0.85rem !important;
+  font-weight: 500 !important;
+  text-align: left !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  font-family: 'Inter', sans-serif !important;
 }
 div[data-testid="stPopover"] > button:hover {
-  color: var(--text) !important;
-  background: var(--surface2) !important;
+  border-color: var(--accent) !important;
+  background: var(--surface3) !important;
+  box-shadow: 0 0 12px var(--glow) !important;
 }
 button[data-testid="baseButton-primary"] {
   background: rgba(239, 68, 68, 0.15) !important;
@@ -359,8 +369,6 @@ if "workspace" not in st.session_state:
     st.session_state.workspace = "default"
 if "workspaces" not in st.session_state:
     st.session_state.workspaces = get_workspaces()
-if "show_add_workspace" not in st.session_state:
-    st.session_state.show_add_workspace = False
 
 
 # --------------------------------------------------------------------------- #
@@ -383,33 +391,37 @@ with st.sidebar:
         workspaces.append(st.session_state.workspace)
         workspaces = sorted(list(set(workspaces)))
         st.session_state.workspaces = workspaces
+
+    with st.popover(f"{st.session_state.workspace} ▾", use_container_width=True):
+        st.markdown("**Switch Workspace**")
         
-    col1, col2, col3 = st.columns([0.7, 0.15, 0.15])
-    
-    with col1:
-        selected_ws = st.selectbox(
-            "Select Workspace",
-            options=workspaces,
-            index=workspaces.index(st.session_state.workspace),
-            label_visibility="collapsed"
-        )
-        if selected_ws != st.session_state.workspace:
-            st.session_state.workspace = selected_ws
-            st.rerun()
-            
-    with col2:
-        if st.button("+", help="Add workspace", use_container_width=True):
-            st.session_state.show_add_workspace = True
-            st.rerun()
-            
-    with col3:
-        with st.popover("⋮", help="Workspace options", use_container_width=True):
-            st.markdown("**Workspace Options**")
-            
-            # --- Rename Option ---
-            st.markdown("Rename")
-            new_name = st.text_input("New name", value=st.session_state.workspace, key="rename_input")
-            if st.button("Save Name", use_container_width=True):
+        # 1. Selection List
+        for ws in workspaces:
+            is_active = (ws == st.session_state.workspace)
+            btn_label = f"• {ws}" if is_active else ws
+            if st.button(btn_label, key=f"ws_sel_{ws}", use_container_width=True):
+                st.session_state.workspace = ws
+                st.rerun()
+                
+        st.markdown("---")
+        
+        # 2. Operations Tabs
+        tab_new, tab_rename, tab_delete = st.tabs(["New", "Rename", "Delete"])
+        
+        with tab_new:
+            with st.form("add_ws_form", clear_on_submit=True):
+                new_ws = st.text_input("Workspace Name", placeholder="e.g. client-abc")
+                if st.form_submit_button("Create Workspace", use_container_width=True):
+                    new_ws = new_ws.strip().lower().replace(" ", "-")
+                    if new_ws:
+                        st.session_state.workspace = new_ws
+                        st.session_state.workspaces = get_workspaces()
+                        st.rerun()
+                        
+        with tab_rename:
+            st.markdown(f"Rename current: `{st.session_state.workspace}`")
+            new_name = st.text_input("New Name", value=st.session_state.workspace, key="popover_rename")
+            if st.button("Save", key="popover_rename_save", use_container_width=True):
                 new_name = new_name.strip().lower().replace(" ", "-")
                 if new_name and new_name != st.session_state.workspace:
                     old_name = st.session_state.workspace
@@ -417,37 +429,20 @@ with st.sidebar:
                     st.session_state.workspace = new_name
                     load_pipeline.clear()
                     st.session_state.workspaces = get_workspaces()
-                    st.success(f"Renamed to '{new_name}'")
                     st.rerun()
-            
-            # --- Delete Option ---
-            st.markdown("---")
-            st.markdown("Delete")
-            st.warning("Warning: This will permanently delete all indexed documents in this workspace.")
-            if st.button("Delete Workspace", use_container_width=True, type="primary"):
-                old_name = st.session_state.workspace
-                delete_workspace(old_name)
-                st.session_state.workspace = "default"
-                load_pipeline.clear()
-                st.session_state.workspaces = get_workspaces()
-                st.success(f"Workspace '{old_name}' deleted.")
-                st.rerun()
-
-    if st.session_state.show_add_workspace:
-        with st.form("add_workspace_form", clear_on_submit=True):
-            new_ws = st.text_input("New workspace name", placeholder="e.g. customer-a")
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.form_submit_button("Create", use_container_width=True):
-                    new_ws = new_ws.strip().lower().replace(" ", "-")
-                    if new_ws:
-                        st.session_state.workspace = new_ws
-                        st.session_state.show_add_workspace = False
-                        st.session_state.workspaces = get_workspaces()
-                        st.rerun()
-            with c2:
-                if st.form_submit_button("Cancel", use_container_width=True):
-                    st.session_state.show_add_workspace = False
+                    
+        with tab_delete:
+            st.markdown(f"Delete current: `{st.session_state.workspace}`")
+            if st.session_state.workspace == "default":
+                st.info("The default workspace cannot be deleted.")
+            else:
+                st.warning("All data in this workspace will be permanently deleted.")
+                if st.button("Delete Workspace", key="popover_delete", use_container_width=True, type="primary"):
+                    old_name = st.session_state.workspace
+                    delete_workspace(old_name)
+                    st.session_state.workspace = "default"
+                    load_pipeline.clear()
+                    st.session_state.workspaces = get_workspaces()
                     st.rerun()
 
     tenant_id = st.session_state.workspace
