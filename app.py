@@ -219,6 +219,31 @@ div[data-testid="stChatInput"] textarea:focus {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ── Popover & Destructive Buttons ────────────────────────────────────── */
+div[data-testid="stPopover"] > button {
+  background: transparent !important;
+  border: none !important;
+  color: var(--muted) !important;
+  font-size: 1.25rem !important;
+  padding: 0.25rem 0.5rem !important;
+  line-height: 1 !important;
+}
+div[data-testid="stPopover"] > button:hover {
+  color: var(--text) !important;
+  background: var(--surface2) !important;
+}
+button[data-testid="baseButton-primary"] {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+  color: #ef4444 !important;
+}
+button[data-testid="baseButton-primary"]:hover {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.3) !important;
+}
 </style>
 """
 
@@ -242,6 +267,89 @@ def index_ready(store_path: str) -> bool:
     return Path(store_path).exists()
 
 
+def get_workspaces() -> list[str]:
+    workspaces = {"default"}
+    try:
+        if PG:
+            store = open_for_read(settings)
+            if hasattr(store, "_conn"):
+                with store._conn.cursor() as cur:
+                    cur.execute("SELECT to_regclass(%s)", (f"public.{store._table}",))
+                    if cur.fetchone()[0] is not None:
+                        cur.execute(f"SELECT DISTINCT tenant_id FROM {store._table}")
+                        rows = cur.fetchall()
+                        for r in rows:
+                            if r[0]:
+                                workspaces.add(r[0])
+        else:
+            if Path(settings.store_path).exists():
+                store = open_for_read(settings)
+                for c in store._chunks:
+                    tid = c.metadata.get("tenant_id")
+                    if tid:
+                        workspaces.add(tid)
+    except Exception:
+        pass
+    return sorted(list(workspaces))
+
+
+def rename_workspace(old_name: str, new_name: str) -> None:
+    if not old_name or not new_name or old_name == new_name:
+        return
+    try:
+        if PG:
+            store = open_for_write(settings, append=True)
+            if hasattr(store, "_conn"):
+                with store._conn.cursor() as cur:
+                    cur.execute(
+                        f"UPDATE {store._table} SET tenant_id = %s WHERE tenant_id = %s",
+                        (new_name, old_name)
+                    )
+        else:
+            if Path(settings.store_path).exists():
+                store = open_for_write(settings, append=True)
+                for c in store._chunks:
+                    if c.metadata.get("tenant_id") == old_name:
+                        c.metadata["tenant_id"] = new_name
+                store.save(settings.store_path)
+    except Exception:
+        pass
+
+
+def delete_workspace(workspace_name: str) -> None:
+    if not workspace_name:
+        return
+    try:
+        if PG:
+            store = open_for_write(settings, append=True)
+            if hasattr(store, "_conn"):
+                with store._conn.cursor() as cur:
+                    cur.execute(
+                        f"DELETE FROM {store._table} WHERE tenant_id = %s",
+                        (workspace_name,)
+                    )
+        else:
+            if Path(settings.store_path).exists():
+                store = open_for_write(settings, append=True)
+                keep_indices = []
+                new_chunks = []
+                for i, c in enumerate(store._chunks):
+                    if c.metadata.get("tenant_id") != workspace_name:
+                        keep_indices.append(i)
+                        new_chunks.append(c)
+                
+                if keep_indices and store._vectors is not None:
+                    store._chunks = new_chunks
+                    store._vectors = store._vectors[keep_indices]
+                else:
+                    store._chunks = []
+                    store._vectors = None
+                
+                store.save(settings.store_path)
+    except Exception:
+        pass
+
+
 # --------------------------------------------------------------------------- #
 # Session state
 # --------------------------------------------------------------------------- #
@@ -249,6 +357,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []  # [{role, content, sources?, handoff?}]
 if "workspace" not in st.session_state:
     st.session_state.workspace = "default"
+if "show_add_workspace" not in st.session_state:
+    st.session_state.show_add_workspace = False
 
 
 # --------------------------------------------------------------------------- #
@@ -265,12 +375,75 @@ with st.sidebar:
 
     # ── Workspace selector
     st.markdown('<div class="nx-section">📂 Workspace</div>', unsafe_allow_html=True)
-    workspace = st.text_input(
-        "Workspace", value=st.session_state.workspace,
-        help="Isolated knowledge base. Uploads and answers stay within it.",
-        label_visibility="collapsed",
-    )
-    st.session_state.workspace = workspace or "default"
+    
+    workspaces = get_workspaces()
+    if st.session_state.workspace not in workspaces:
+        workspaces.append(st.session_state.workspace)
+        workspaces = sorted(list(set(workspaces)))
+        
+    col1, col2, col3 = st.columns([0.7, 0.15, 0.15])
+    
+    with col1:
+        selected_ws = st.selectbox(
+            "Select Workspace",
+            options=workspaces,
+            index=workspaces.index(st.session_state.workspace),
+            label_visibility="collapsed"
+        )
+        if selected_ws != st.session_state.workspace:
+            st.session_state.workspace = selected_ws
+            st.rerun()
+            
+    with col2:
+        if st.button("➕", help="Add workspace", use_container_width=True):
+            st.session_state.show_add_workspace = True
+            st.rerun()
+            
+    with col3:
+        with st.popover("⋮", help="Workspace options", use_container_width=True):
+            st.markdown("**Workspace Options**")
+            
+            # --- Rename Option ---
+            st.markdown("✏️ Rename")
+            new_name = st.text_input("New name", value=st.session_state.workspace, key="rename_input")
+            if st.button("Save Name", use_container_width=True):
+                new_name = new_name.strip().lower().replace(" ", "-")
+                if new_name and new_name != st.session_state.workspace:
+                    old_name = st.session_state.workspace
+                    rename_workspace(old_name, new_name)
+                    st.session_state.workspace = new_name
+                    load_pipeline.clear()
+                    st.success(f"Renamed to '{new_name}'")
+                    st.rerun()
+            
+            # --- Delete Option ---
+            st.markdown("---")
+            st.markdown("🗑️ Delete")
+            st.warning("Warning: This will permanently delete all indexed documents in this workspace.")
+            if st.button("Delete Workspace", use_container_width=True, type="primary"):
+                old_name = st.session_state.workspace
+                delete_workspace(old_name)
+                st.session_state.workspace = "default"
+                load_pipeline.clear()
+                st.success(f"Workspace '{old_name}' deleted.")
+                st.rerun()
+
+    if st.session_state.show_add_workspace:
+        with st.form("add_workspace_form", clear_on_submit=True):
+            new_ws = st.text_input("New workspace name", placeholder="e.g. customer-a")
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.form_submit_button("Create", use_container_width=True):
+                    new_ws = new_ws.strip().lower().replace(" ", "-")
+                    if new_ws:
+                        st.session_state.workspace = new_ws
+                        st.session_state.show_add_workspace = False
+                        st.rerun()
+            with c2:
+                if st.form_submit_button("Cancel", use_container_width=True):
+                    st.session_state.show_add_workspace = False
+                    st.rerun()
+
     tenant_id = st.session_state.workspace
 
     # ── Persona
