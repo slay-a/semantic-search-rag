@@ -1,0 +1,32 @@
+Internal Architecture Notes
+===========================
+
+Service topology
+----------------
+The platform is split into three services: the edge gateway, the payments
+service, and the ledger. The edge gateway terminates TLS, authenticates
+requests, and applies rate limiting before forwarding traffic to the payments
+service. The payments service owns all business logic for charges, refunds, and
+payouts. The ledger is an append-only store of double-entry accounting records;
+it is the system of record for balances.
+
+Data storage
+------------
+The payments service uses PostgreSQL as its primary database. Hot read traffic
+is served from a Redis cache with a 30-second TTL. The ledger is stored in a
+separate PostgreSQL instance and is never mutated in place — corrections are
+posted as compensating entries.
+
+Consistency model
+------------------
+Charges are written to PostgreSQL first and then asynchronously projected into
+the ledger via an outbox pattern. Because projection is asynchronous, the ledger
+is eventually consistent with the payments database, typically within two
+seconds. Reconciliation jobs run hourly to detect and alert on any divergence.
+
+Deployment
+----------
+Services are deployed as containers orchestrated by Kubernetes. Each service
+runs a minimum of three replicas across two availability zones. Database
+migrations are applied by a dedicated job that runs before the new application
+version is rolled out.
